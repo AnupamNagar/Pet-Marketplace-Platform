@@ -93,4 +93,55 @@ With Phase 1 & 2 complete, the entire architecture (Frontend UI, Backend API, Da
 ### What's Next?
 We have successfully completed **Phase 1** and **Phase 2**. The entire architecture (Database, Message Broker, Backend API, Frontend UI, Security, and Routing) is properly connected. 
 
-Next up is **Phase 3: Pet Listing Core Module**, where we will create the core entities to actually allow users to create and browse pet marketplace listings.
+---
+
+## 🐾 Phase 3: Pet Listing Core Module
+
+In this phase, we developed the core functionality allowing sellers to list pets with detailed profiles, robust multimedia (images/videos), and implemented the discovery UI for buyers.
+
+### 1. Pet Entity & Database Modeling
+- **`Pet.java`**: Maps to the `pets` table. Contains rich data like `name`, `breed`, `age`, `price`, and `description`.
+- **Enums**: Utilized `PetCategory` (DOG, CAT, BIRD, etc.) and `PetStatus` (AVAILABLE, SOLD, PENDING) for stringent data validation.
+- **Multimedia Relationships**: Utilized `@ElementCollection` to map up to 5 `imageUrls` via a separate joined table (`pet_images`) and a `videoUrl` directly onto the Pet entity.
+- **Foreign Keys**: Linked every `Pet` to a `User` (the seller) using a `@ManyToOne` relationship to enforce ownership constraints.
+
+### 2. Media File Storage Service
+- **`FileStorageService.java`**: Implemented a local file system storage handler that takes incoming `MultipartFile`s, cleans the filename, validates against path traversal exploits, and generates an absolutely unique UUID filename to prevent overwrites.
+- **`FileController.java`**: Provides a secured `POST /api/files/upload` endpoint matching seller credentials, and a universally open `GET /api/files/{fileName}` for serving images/videos directly from the `uploads/` directory back to the client.
+
+### 3. Pet Management REST APIs
+- **`PetController.java` & `PetService.java`**: Provides secured endpoints for `POST`, `PATCH`, and `DELETE` required to create/edit listings. Ensures only the *owning* seller of a Pet can mutate its status.
+- **Public Discovery**: Provides completely public `GET` APIs returning active inventory and offering complex query parameters for finding pets by `category` and `keyword`. 
+- **Data Transfer Objects**: Built `PetRequest` and `PetResponse` objects to encapsulate list mapping arrays (`imageUrls`), preventing recursive JSON serialization errors between joined entities.
+
+### 4. Frontend Interactive UI (React)
+- **`PetDashboard.jsx`**: A grid layout displaying preview cards of available pets. Includes interactive category filters and a keyword search bar hooked directly into the backend discovery API.
+- **`CreatePetListing.jsx`**: A complex form enabling sellers to list pets. Implements asynchronous sequential multi-part uploads to securely push up to 5 image files and 1 video file to the server and stitch their locations back into the final `Pet` creation request.
+- **`PetDetails.jsx`**: A massive interactive multimedia gallery component. Replaced standard images with a state-driven main viewport capable of swapping out high-resolution photos or securely executing a raw HTML5 `<video>` feed based on user thumbnail interaction.
+
+---
+
+## ⚠️ Phase 3 Complexities & Bug Resolutions
+
+1. **Unsplash API Deprecation & CORS loops**: Initially used an external randomized API for missing placeholders. When that API blocked localhost traffic, images triggered infinite 404 loops in React. *Fix: Implemented `referrerPolicy="no-referrer"`, handled React `onError` events cleanly, and migrated to a stable `Placehold.co` fallback.*
+2. **Spring Boot Multi-part Limitations**: Spring defaults strictly cap uploads at 1MB, throwing fatal 413 "Payload Too Large" errors when attempting to attach High-Definition videos. *Fix: Explicitly increased internal `spring.servlet.multipart.max-file-size` to 50MB and `max-request-size` to 100MB in properties.*
+3. **CORS Preflight (OPTIONS) Blocked by JWT**: When doing complex multi-part Form Data passing, modern browsers execute a preflight `OPTIONS` check. Spring Security aggressively blocked these, seeing them as unauthenticated token-less attempts. *Fix: Injected a global `CorsConfigurationSource` to override Spring Security and permit raw `OPTIONS` calls securely.*
+
+---
+
+## 🧪 Phase 3 Verification & Testing Plan
+
+### 1. API Seed Testing
+Built `seed-data.ps1` (PowerShell Script):
+- Automatically registered a `ROLE_SELLER` test user dynamically.
+- Extracted and stored a valid `Bearer JWT Token` locally in powershell runtime variables.
+- Crafted structured JSON matching the `PetRequest` DTO and forcefully injected beautiful mock Pet categories (Dogs, Cats, Rabbits) to bypass standard UI workflows and stress-test Database foreign key assignment.
+
+### 2. End-to-End Multimedia Verification
+- Uploaded valid `.jpg` and `.mp4` file drops via the Create UI component. Validated Spring Boot correctly caught the byte-streams and wrote physical representations to the local NTFS system (`/backend/uploads/`).
+- Validated that the HTTP 200 response URLs correctly pointed towards `http://localhost:8080/api/files/UUID` and properly resolved as valid byte array streams on the React UI.
+
+---
+
+### What's Next?
+Next up is **Phase 4: Transactions & Kafka Integration**. We will create `Transaction` entities, handle calculated 5% commission rates, build the actual 'Checkout' interaction on the Pet Details page, and hook into `spring-kafka` to emit real decoupled JSON events when users transact.
