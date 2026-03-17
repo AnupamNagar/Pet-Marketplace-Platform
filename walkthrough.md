@@ -1,0 +1,96 @@
+# Platform Implementation Walkthrough (Phases 1 & 2)
+
+This document provides a detailed explanation of the code and infrastructure implemented so far for your Pet Marketplace Platform. Currently, we have completed the core setup (Phase 1) and Security/User Management (Phase 2).
+
+---
+
+## 🏗️ Phase 1: Infrastructure & Project Setup
+
+### 1. Docker Compose ([docker-compose.yml](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/docker-compose.yml))
+At the root level, we created a Docker Compose file to manage our local backing services:
+- **PostgreSQL (`postgres`)**: A relational database to store user accounts, pet listings, and future transaction/appointment data.
+- **Apache Kafka (`kafka`) & Zookeeper (`zookeeper`)**: An event streaming platform. Zookeeper manages the Kafka cluster, while Kafka itself will act as a message broker later for our notification/transaction events.
+
+### 2. Spring Boot Backend Setup
+We initialized the Java Spring Boot project using Maven ([pom.xml](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/pom.xml)):
+- **Dependencies**: Included Spring Web (REST APIs), Spring Data JPA (Database mapping), Spring Security (Authentication), Spring Kafka (Messaging), and PostgreSQL driver.
+- **[application.properties](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/resources/application.properties)**: Located in `src/main/resources`. This connects our Spring Boot app to the PostgreSQL database (using JDBC) and tells it where Kafka is running (localhost:9092).
+- **[Main.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/Main.java)**: The entry point for the Spring Boot application (`@SpringBootApplication`).
+
+### 3. React Frontend Setup
+We initialized a React application mapped into a `frontend` module using Vite, which is much faster than standard Create-React-App.
+- **Tailwind CSS**: We configured [tailwind.config.js](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/frontend/tailwind.config.js) and [postcss.config.js](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/frontend/postcss.config.js) to allow us to rapidly write beautiful styles using utility classes (injected into [src/index.css](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/frontend/src/index.css)).
+
+---
+
+## 🔒 Phase 2: Security & User Management
+
+To secure our platform, we implemented Role-Based Access Control (RBAC) and JSON Web Tokens (JWT). When a user logs in, they receive an encrypted token instead of maintaining a "session", making our application scalable and stateless.
+
+### 1. Database Entities and Models
+- **[User.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/model/User.java)**: Maps to the `users` table in Postgres. Contains the username, email, encrypted password, and their specific role.
+- **[Role.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/model/Role.java)**: An Enum containing the platform roles (`ROLE_BUYER`, `ROLE_SELLER`, `ROLE_VET`, `ROLE_ADMIN`).
+- **[UserRepository.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/repository/UserRepository.java)**: An interface extending `JpaRepository`. Without writing any SQL, this interface automatically handles database operations like finding users by Email/Username or saving new accounts.
+
+### 2. Core Spring Security Configuration
+- **[WebSecurityConfig.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/WebSecurityConfig.java)**: This is the heart of our security. We opened access to authentication APIs (`/api/auth/**` are open endpoints) but restricted everything else (`anyRequest().authenticated()`). We also defined our Password Encoder (BCrypt) here.
+- **[UserDetailsImpl](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/services/UserDetailsImpl.java#13-96) & [UserDetailsServiceImpl](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/services/UserDetailsServiceImpl.java#12-26)**: When a user logs in, Spring Security looks up the username. These specific classes load the user from the [UserRepository](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/repository/UserRepository.java#9-16) and convert them into a Spring Security "Principal" object containing their roles/authority.
+
+### 3. JWT Filtering & Utilities (`security/jwt/`)
+- **[JwtUtils.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/jwt/JwtUtils.java)**: Handles creating a new JWT token using a secret key, and parsing incoming tokens to extract the username and expiration date.
+- **[AuthTokenFilter.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/jwt/AuthTokenFilter.java)**: An interceptor. For *every single request* a user makes (except `/api/auth/`), this filter intercepts the request, looks for an `Authorization: Bearer <token>` header, validates the JWT, and logs the user in if the token is valid.
+- **[AuthEntryPointJwt.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/jwt/AuthEntryPointJwt.java)**: If an unauthenticated user tries to hit a secure API (like buying a pet), this class intercepts the standard server error and properly returns a JSON `401 Unauthorized` response with a readable error message.
+
+### 4. REST APIs (`controller/` and `payload/`)
+Finally, we developed the actual endpoints that our React application will talk to. 
+
+**Data Transfer Objects (DTOs)** in `payload/`:
+- **Requests**: [LoginRequest](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/request/LoginRequest.java#6-14) (username & password) and [SignupRequest](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/request/SignupRequest.java#8-25) (username, email, password, role). These prevent us from directly exposing our Database entities to the internet.
+- **Responses**: [JwtResponse](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/response/JwtResponse.java#7-24) (returns the token and profile info on login) and [MessageResponse](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/response/MessageResponse.java#6-11) (generic success/fail message).
+
+**[AuthController.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/controller/AuthController.java)**:
+- **`POST /api/auth/signup`**: Checks if the user/email already exists. If not, sets their role, hashes their password securely using BCrypt, and saves them to PostgreSQL.
+- **`POST /api/auth/signin`**: Verifies the username + password via the `AuthenticationManager`. If valid, it generates a JWT string via [JwtUtils](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/jwt/JwtUtils.java#16-64) and sends it back alongside the user's role.
+
+### 5. Frontend Authentication UI (`frontend/src/`)
+In the React application, we built the user-facing pages and integrated them with our backend API:
+- **`services/auth.service.js`**: Uses `axios` to send POST requests containing the user's credentials to our Spring Boot backend. Upon successful login, it stores the returned JWT token and user details in `localStorage`.
+- **`services/auth-header.js`**: A helper function that attaches the `Authorization: Bearer <token>` header to future API requests so the backend knows the user is authenticated.
+- **`components/Register.jsx` & `Login.jsx`**: Beautifully styled forms using Tailwind CSS and Lucide React icons. These components capture user input, handle form validation warnings, and call the `AuthService`.
+- **`App.jsx`**: We set up React Router to navigate between the Home, Login, Register, and Profile pages. The NavBar dynamically updates to show the user's profile and a Logout button if a valid JWT token is detected in local storage.
+
+---
+
+## 🧪 Testing the Application Flow (End-to-End)
+With Phase 1 & 2 complete, the entire architecture (Frontend UI, Backend API, Database, and Message Brokers) is functional. Here is how to verify the system:
+
+### 1. Start the Environment
+- Run `docker-compose up -d` to spin up PostgreSQL, Zookeeper, and Kafka.
+- Run `mvn spring-boot:run` in the `backend/` directory.
+- Run `npm run dev` in the `frontend/` directory and navigate to `http://localhost:5173`.
+
+### 2. User Registration (Sign up)
+1. Click **Sign Up** in the Navigation Bar.
+2. Enter a Username, Email, Password, and select a Role (e.g., Buyer or Seller).
+3. Submitting the form will send a POST request to `/api/auth/signup`.
+4. The Spring Boot backend will hash the password and persist the user in the PostgreSQL database.
+5. A green success message will confirm registration.
+
+### 3. User Login & JWT Authentication
+1. Click **Login** and enter the credentials just created.
+2. Submitting the form sends a POST request to `/api/auth/signin`.
+3. The backend authenticates the credentials against the database and generates a cryptographically signed **JSON Web Token (JWT)**.
+4. The React app receives this token and stores it in Local Storage.
+
+### 4. Protected Routes & Profile
+1. Upon successful login, React automatically redirects to the `/profile` protected route.
+2. The Navigation Bar dynamically updates: "Login/Sign Up" links are replaced with your **Profile** and a **Logout** button.
+3. The dashboard correctly displays the User's roles retrieved from the backend.
+4. Clicking **Logout** destroys the JWT token and instantly kicks the interface back to the public login state.
+
+---
+
+### What's Next?
+We have successfully completed **Phase 1** and **Phase 2**. The entire architecture (Database, Message Broker, Backend API, Frontend UI, Security, and Routing) is properly connected. 
+
+Next up is **Phase 3: Pet Listing Core Module**, where we will create the core entities to actually allow users to create and browse pet marketplace listings.
