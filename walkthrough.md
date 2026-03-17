@@ -143,5 +143,81 @@ Built `seed-data.ps1` (PowerShell Script):
 
 ---
 
+---
+
 ### What's Next?
-Next up is **Phase 4: Transactions & Kafka Integration**. We will create `Transaction` entities, handle calculated 5% commission rates, build the actual 'Checkout' interaction on the Pet Details page, and hook into `spring-kafka` to emit real decoupled JSON events when users transact.
+Next up is **Phase 4: Transactions & Kafka Integration**.
+
+---
+
+## 💳 Phase 4: Transactions & Kafka Integration
+
+In this phase we implemented a decoupled, event-driven purchase system. When a buyer buys a pet, three things happen simultaneously: a Transaction is recorded, the Pet status is marked SOLD, and an asynchronous Kafka event fires to simulate notification services.
+
+### 1. Transaction Entity & Commission Logic
+- **`Transaction.java`**: Maps to the `transactions` table. Each record stores the `buyer`, `seller`, `pet`, the full `amount`, the calculated `commissionFee` (5%), and `payoutAmount` (95%). Uses `@ManyToOne` FK relationships.
+- **`TransactionStatus.java`**: Enum with states `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED` — ready for future Stripe webhook integration.
+- **`TransactionRepository.java`**: Query methods for buyer and seller history (`findByBuyerIdOrderByCreatedAtDesc`, `findBySellerIdOrderByCreatedAtDesc`).
+
+### 2. Kafka Event Architecture
+- **`OrderEvent.java`**: A lightweight POJO (Event DTO) carrying `transactionId`, `petId`, `petName`, `buyerEmail`, `sellerEmail`, and `amount` across the message bus.
+- **`OrderEventProducer.java`**: A `@Service` injected with `KafkaTemplate<String, OrderEvent>`. On checkout, it calls `kafkaTemplate.send("order-events", event)` to publish the event asynchronously.
+- **`OrderEventConsumer.java`**: A `@KafkaListener` listening to the `order-events` topic. When triggered, it logs simulated email notifications to both the Buyer and the Seller. Designed as a plug-in point for real email/SMS APIs (e.g., SendGrid, Twilio).
+- **`application.properties`**: Configured `JsonSerializer` for producer and `JsonDeserializer` (with trusted packages) for the consumer to handle the `OrderEvent` POJO correctly.
+
+### 3. Checkout REST API
+- **`TransactionService.java`**: Core business logic — validates pet availability, prevents self-purchase, calculates the 5% commission split, saves the `Transaction`, mutates the `PetStatus` to `SOLD`, and fires the Kafka event.
+- **`TransactionController.java`**: Exposes `POST /api/transactions/checkout` (for all logged-in users), `GET /api/transactions/buyer`, and `GET /api/transactions/seller`. All endpoints secured with JWT + role guards.
+
+### 4. Frontend Checkout UI
+- **`transaction.service.js`**: Axios service for calling checkout and history endpoints with the stored JWT token.
+- **`PetDetails.jsx` — Buy Now Modal**: Replaced the placeholder "Contact Seller" button with a functional **"Buy Now"** button. Clicking it opens a polished confirmation modal showing the pet thumbnail, price, 5% platform fee breakdown, and a "Confirm Purchase" button. On success, the button is replaced by a green ✅ "Purchase Successful!" banner showing the Transaction ID.
+
+---
+
+## ⚠️ Phase 4 Complexities & Bug Resolutions
+
+1. **Kafka Consumer JSON Deserialization Error**: The consumer initially failed to deserialize the `OrderEvent` POJO because the `JsonDeserializer` didn't know which class to map to. *Fix: Added `spring.kafka.consumer.properties.spring.json.value.default.type` and `trusted.packages=*` to `application.properties`.*
+2. **JSX Modal Outside Return Block**: The checkout modal was accidentally placed outside the root return `<div>`, breaking the component. *Fix: Moved the closing root `</div>` to after the modal block, correctly nesting the overlay inside the component tree.*
+3. **Self-Purchase Prevention**: Without a guard, a seller could buy their own listing. *Fix: Added a condition in `TransactionService` (`if pet.getSeller().getId().equals(buyer.getId())`) and mirrored it in the UI by disabling the Buy Now button if `currentUser.username === pet.sellerUsername`.*
+
+---
+
+## 🧪 Phase 4 Verification & Testing Plan
+
+### 1. Manual API Testing via Postman
+```
+# Step 1: Login as buyer to get JWT
+POST http://localhost:8080/api/auth/signin
+Body: { "username": "buyer_user", "password": "password" }
+
+# Step 2: Execute Checkout
+POST http://localhost:8080/api/auth/checkout
+Authorization: Bearer <token>
+Body: { "petId": 2 }
+
+# Step 3: Verify buyer's order history
+GET http://localhost:8080/api/transactions/buyer
+Authorization: Bearer <token>
+```
+
+### 2. Kafka Event Verification
+- After checkout, watch the Spring Boot console for the Kafka pipeline logs:
+  ```
+  #### -> Producing message -> OrderEvent{transactionId=1, petId=2, petName='Max', ...}
+  #### -> Consumed message -> OrderEvent{...}
+  🔔 SIMULATING NOTIFICATION SERVICES:
+  📧 Email to Buyer - Successfully purchased Max
+  📧 Email to Seller - Your pet Max was sold for $500.0
+  ```
+
+### 3. End-to-End UI Test
+1. Log in as **Buyer**. Open a pet listing → click **Buy Now**.
+2. Confirm the price breakdown modal.
+3. Confirm Purchase → green success banner appears with Transaction ID.
+4. Refresh `/pets` dashboard → the purchased pet is removed from available listings.
+
+---
+
+### What's Next?
+**Phase 4.5: Stripe Connect Integration** — replacing the simulated modal with a real Stripe Payment Element so real money flows from Buyer → Platform (5% commission) → Seller.
