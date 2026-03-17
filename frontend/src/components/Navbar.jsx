@@ -17,18 +17,21 @@ export default function Navbar({ currentUser }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 transition-colors">
-              <PawPrint className="h-8 w-8" />
-              <span className="font-bold text-xl tracking-tight hidden sm:block">
-                Pet<span className="text-gray-900">Verse</span>
-              </span>
+            <Link to="/" className="flex items-center group">
+              <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+                Pet<span className="text-indigo-600 group-hover:text-indigo-500 transition-colors">Verse</span>
+              </h1>
             </Link>
             
-            {/* Desktop Navigation Links (For future usage/expansion) */}
             <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
-              <Link to="/home" className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                Home
+              <Link to="/pets" className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+                Browse Pets
               </Link>
+              {currentUser && (currentUser.roles.includes("ROLE_SELLER") || currentUser.roles.includes("ROLE_ADMIN")) && (
+                <Link to="/pets/create" className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                  List a Pet
+                </Link>
+              )}
             </div>
           </div>
 
