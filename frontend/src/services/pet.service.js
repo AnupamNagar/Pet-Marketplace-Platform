@@ -1,7 +1,9 @@
 import axios from "axios";
 import authHeader from "./auth-header";
 
-const API_URL = "http://localhost:8080/api/pets";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+const API_URL = `${BASE_URL}/pets`;
+const FILES_URL = `${BASE_URL}/files`;
 
 const getAvailablePets = () => {
   return axios.get(API_URL + "/available");
@@ -37,7 +39,7 @@ const deletePetListing = (id) => {
 const uploadFile = (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  return axios.post("http://localhost:8080/api/files/upload", formData, {
+  return axios.post(FILES_URL + "/upload", formData, {
     headers: {
       ...authHeader(),
       "Content-Type": "multipart/form-data"

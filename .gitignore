@@ -1,0 +1,36 @@
+# ─── OS generated files ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ─── Backend (Maven / Spring Boot) ────────────────────────────────────────────
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+
+# ─── Frontend (Node / Vite) ────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# ─── Secrets — NEVER commit these ──────────────────────────────────────────────
+# .env.production has safe defaults — still OK to commit
+# But local overrides should never be committed:
+*.env.local
+.env.local
+
+# ─── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+backend_output.log
+deps.txt
+backend_logs.tmp
+
+# ─── Docker ────────────────────────────────────────────────────────────────────
+# Keep Dockerfile, exclude local build artifacts
+*.tar

@@ -6,6 +6,11 @@ This document provides a detailed explanation of the code and infrastructure imp
 
 ## 🏗️ Phase 1: Infrastructure & Project Setup
 
+### Command to start the application in local
+- Start Infrastructure: docker-compose up -d
+- Start Backend: cd backend ->  mvn spring-boot:run
+- Start Frontend: cd frontend -> npm run dev
+
 ### 1. Docker Compose ([docker-compose.yml](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/docker-compose.yml))
 At the root level, we created a Docker Compose file to manage our local backing services:
 - **PostgreSQL (`postgres`)**: A relational database to store user accounts, pet listings, and future transaction/appointment data.
@@ -219,5 +224,46 @@ Authorization: Bearer <token>
 
 ---
 
+---
+
+## 🇮🇳 Phase 4.5: Razorpay Payment Integration
+
+In this phase, we pivoted from Stripe (invite-only in India) to **Razorpay**, the industry standard for Indian marketplaces. We implemented the **Razorpay Route** architecture to handle automatic 5% commission splits.
+
+### 1. Backend Service Layer
+- **`RazorpayService.java`**: Handles the connection to Razorpay API. It converts the pet price to paise (INR x 100), creates a Razorpay Order, and generates the `key_id` plus `order_id` for the frontend.
+- **Signature Verification**: Implemented a secure HMAC-SHA256 verification method that checks `order_id + "|" + payment_id` against the secret key to prevent spoofing.
+
+### 2. Razorpay REST Controller
+- **`POST /api/payments/create-order`**: Secured endpoint that verifies the pet exists and returns the order details needed for the frontend popup.
+- **`POST /api/payments/verify`**: The main confirmation endpoint. It verifies the signature, and if valid, triggers the existing `TransactionService` to fulfill the order, mark it SOLD, and fire the Kafka event.
+- **`POST /api/payments/webhook`**: Public backup endpoint for asynchronous confirmation from Razorpay's servers.
+
+### 3. Frontend Checkout Integration
+- **`index.html`**: Globally loaded the `checkout.js` script from Razorpay's CDN.
+- **`PetDetails.jsx`**: Replaced the mock checkout with the real **Razorpay Checkout** popup. It pre-fills the buyer's name/email and handles success/failure callbacks dynamically.
+
+---
+
+## ⚠️ Phase 4.5 Complexities & Bug Resolutions
+
+1. **BigDecimal Type Mismatch**: The pet price was stored as `BigDecimal`, but Razorpay requires `Long` (paise). *Fix: Used `.multiply(new BigDecimal(100)).longValue()` to safely convert without precision loss.*
+2. **Ambiguous JSONObject Methods**: The `org.json` library had multiple `put()` signatures causing compilation errors. *Fix: Explicitly cast values or used `String.valueOf()` to resolve ambiguity.*
+
+---
+
+## 🧪 Phase 4.5 Verification & Testing Plan
+
+### Step-by-Step Test:
+1. **Run Backend & Frontend** (see the run commands provided earlier).
+2. **Login as Buyer** and find any **AVAILABLE** pet list.
+3. Click **"Buy Now"** → Click **"Confirm Purchase"**.
+4. The **Razorpay Checkout** popup will appear.
+5. **Test Card**: Use `4111 1111 1111 1111` for card testing.
+6. **Test UPI**: Click UPI and enter `success@razorpay` for an instant success simulation.
+7. Upon success, the popup closes, the page updates to **"Purchase Successful!"**, and you can find your order in the backend database.
+
+---
+
 ### What's Next?
-**Phase 4.5: Stripe Connect Integration** — replacing the simulated modal with a real Stripe Payment Element so real money flows from Buyer → Platform (5% commission) → Seller.
+**Phase 5: Appointments & Reviews** — Building the vet booking system and user feedback loop.

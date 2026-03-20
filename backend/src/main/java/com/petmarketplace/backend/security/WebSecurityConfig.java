@@ -61,6 +61,7 @@ public class WebSecurityConfig {
                         auth.requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/test/**").permitAll()
                                 .requestMatchers("/error").permitAll()
+                                .requestMatchers("/api/payments/webhook").permitAll()
                                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/pets/**", "/api/files/**").permitAll()
                                 .anyRequest().authenticated()
                 );

@@ -33,46 +33,76 @@ Build a full-stack, production-grade Pet Marketplace Platform. Sellers list pets
 
 ---
 
-## Phase 4.5: Stripe Payment Integration 🔜
+## Phase 4.5: Razorpay Payment Integration 🔜
 
 > [!IMPORTANT]
-> **Prerequisite**: Register at [stripe.com](https://stripe.com), enable Stripe Connect, and obtain your `sk_test_...` Secret Key and `pk_test_...` Publishable Key.
+> **Prerequisite**: Register at [razorpay.com](https://razorpay.com), enable **Razorpay Route** (Products → Route), and obtain your `key_id` (`rzp_test_...`) and `key_secret`.
+>
+> **Why Razorpay?** Stripe is invite-only in India. Razorpay is the equivalent used by Swiggy, Cred, and Zepto — supports UPI, PhonePe, GPay, cards, and wallets.
 
-### Architecture: Stripe Connect Platform Flow
+### Architecture: Razorpay Route Platform Flow
 ```
-Buyer pays →  Stripe Payment Intent  →  Platform receives full amount
-                                        ↓
-                       Stripe splits automatically:
-                       - Seller connected account receives 95%
-                       - Platform (your) Stripe account receives 5%
+Buyer pays full amount via UPI / Card / Wallet
+              ↓
+    Razorpay Order Created by Backend
+              ↓
+    Razorpay Route splits automatically:
+    - Seller linked account receives 95%
+    - Platform Razorpay account holds 5% commission
+              ↓
+    Webhook fires → Backend confirms → Kafka OrderEvent published
 ```
+
+### 💰 Razorpay Pricing & Limits
+
+| Aspect | Details |
+|---|---|
+| **Account & Test Mode** | Free — no monthly fee, unlimited test transactions |
+| **Domestic (UPI / Wallet / Card)** | 2% per live transaction |
+| **International Cards** | 3% per live transaction |
+| **UPI Transaction Limit** | ₹1,00,000 per transaction (NPCI rule) |
+| **Card Transaction Limit** | ₹10,00,000 per transaction |
+| **Settlement to your bank** | T+3 business days (standard) |
+| **KYC to go live** | PAN + Aadhaar + Bank account required |
+| **Razorpay Route activation** | Request via dashboard chat (free, usually same day) |
+
+**Real Money Example — ₹5,000 pet sale:**
+- Razorpay fee: ₹100 (2%)
+- Platform commission (5%): **₹250 → your account**
+- Seller payout (95% - Razorpay fee): **₹4,650 → seller's bank**
+
+**Test Credentials (use in test mode — no real money):**
+- Test Card: `4111 1111 1111 1111` · CVV: `123` · Expiry: any future date
+- Test UPI: `success@razorpay` (instant success) · `failure@razorpay` (simulates failure)
 
 ### Backend Changes
 #### [MODIFY] [pom.xml](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/pom.xml)
-- Add `com.stripe:stripe-java:25.x` dependency.
+- Add `com.razorpay:razorpay-java:1.4.x` dependency.
 
-#### [NEW] `StripeService.java`
-- `createPaymentIntent(pet, buyer)` — creates a Stripe Payment Intent with `application_fee_amount` set to 5% and the `transfer_data.destination` pointing to the seller's Stripe account ID.
-- `createSellerOnboardingLink(user)` — generates a Stripe Connect OAuth URL for sellers to register their bank account and complete KYC.
+#### [NEW] [RazorpayService.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/RazorpayService.java)
+- [createOrder(pet, buyer)](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/RazorpayService.java#29-61) — creates a Razorpay Order with the full pet price. Uses Route to set `transfers` with 95% to seller's linked account ID.
+- [verifyPaymentSignature(orderId, paymentId, signature)](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/RazorpayService.java#62-89) — validates the HMAC-SHA256 webhook signature to prevent fraud.
+- `createSellerLinkedAccount(user)` — registers the seller's bank account as a Route linked account.
 
-#### [NEW] `StripeWebhookController.java`
-- `POST /api/payments/webhook` — receives Stripe's async `payment_intent.succeeded` event, confirms the transaction, updates pet status to SOLD, and fires the Kafka [OrderEvent](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/event/OrderEvent.java#5-54).
+#### [NEW] `RazorpayWebhookController.java`
+- `POST /api/payments/webhook` — receives Razorpay's `payment.captured` event, verifies signature, confirms the transaction, marks pet SOLD, and fires the Kafka [OrderEvent](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/event/OrderEvent.java#5-54).
 
-#### [MODIFY] [TransactionService.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/TransactionService.java)
-- [processCheckout()](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/TransactionService.java#36-80) now calls `StripeService.createPaymentIntent()` and returns a `clientSecret` to the frontend instead of confirming immediately.
+#### [MODIFY] [application.properties](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/resources/application.properties)
+- Add `razorpay.key.id` and `razorpay.key.secret`.
 
 #### [MODIFY] [WebSecurityConfig.java](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/security/WebSecurityConfig.java)
-- Add `/api/payments/webhook` to permit-all (Stripe calls this without auth).
+- Add `/api/payments/webhook` to permit-all.
 
 ### Frontend Changes
-#### [NEW] Install `npm install @stripe/react-stripe-js @stripe/stripe-js`
+#### [NEW] Add Razorpay Checkout script
+- Load `https://checkout.razorpay.com/v1/checkout.js` via `<script>` tag in [index.html](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/frontend/index.html).
 
 #### [MODIFY] [PetDetails.jsx](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/frontend/src/components/PetDetails.jsx)
-- Replace the Buy Now modal with `<Elements>` (Stripe provider) wrapping a `<PaymentElement>` form.
-- On mount, call backend to get `clientSecret`, then use `stripe.confirmPayment()`.
+- Replace the simulation modal with a call to backend to create a Razorpay Order, then open `new window.Razorpay(options).open()` — which launches Razorpay's hosted checkout supporting UPI, cards, netbanking, wallets.
+- On [handler](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/frontend/src/components/PetDetails.jsx#60-80) callback (payment success), call backend to verify signature and confirm transaction.
 
 #### [NEW] `SellerOnboarding.jsx`
-- A page for sellers to connect their Stripe bank account. Calls the onboarding API and redirects to Stripe.
+- A page for sellers to submit their bank account details for Route linked account creation.
 
 ---
 
@@ -98,9 +128,9 @@ Buyer pays →  Stripe Payment Intent  →  Platform receives full amount
 
 ### Manual End-to-End Verification
 1. Seller lists a pet with 3 images + 1 video via the Create Listing form.
-2. Buyer opens the listing, clicks **Buy Now**, enters Stripe test card `4242 4242 4242 4242`.
-3. Stripe confirms payment → Webhook fires → Kafka [OrderEvent](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/event/OrderEvent.java#5-54) published.
+2. Buyer opens the listing, clicks **Buy Now**, enters Razorpay test card `4111 1111 1111 1111`.
+3. Razorpay confirms payment → Webhook/Verify fires → Kafka [OrderEvent](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/payload/event/OrderEvent.java#5-54) published.
 4. Backend records transaction, marks pet SOLD.
-5. Seller's connected Stripe account receives 95% payout automatically.
-6. Platform Stripe account receives 5% commission.
+5. Seller's connected Razorpay account receives 95% payout automatically via **Razorpay Route**.
+6. Platform Razorpay account receives 5% commission.
 7. Kafka consumer logs simulated email notifications for both parties.

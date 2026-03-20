@@ -44,12 +44,55 @@ const PetDetails = () => {
     setBuying(true);
     setBuyError("");
     try {
-      const res = await TransactionService.checkout(pet.id);
-      setTransaction(res.data);
-      setPet(prev => ({ ...prev, status: 'SOLD' }));
-      setShowModal(false);
+      // 1. Create Razorpay Order on Backend
+      const orderRes = await TransactionService.createRazorpayOrder(pet.id);
+      const { orderId, amount, currency, keyId } = orderRes.data;
+
+      // 2. Configure Razorpay Options
+      const options = {
+        key: keyId,
+        amount: amount,
+        currency: currency,
+        name: "PetVerse",
+        description: `Purchase ${pet.name}`,
+        image: pet.imageUrls && pet.imageUrls.length > 0 ? pet.imageUrls[0] : "https://placehold.co/100x100?text=PetVerse",
+        order_id: orderId,
+        handler: async (response) => {
+          // 3. Verify Payment on Backend
+          try {
+            setBuying(true);
+            const verifyRes = await TransactionService.verifyRazorpayPayment({
+              petId: pet.id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            
+            setTransaction(verifyRes.data);
+            setPet(prev => ({ ...prev, status: 'SOLD' }));
+            setShowModal(false);
+          } catch (error) {
+            setBuyError("Payment verification failed. Please contact support.");
+          } finally {
+            setBuying(false);
+          }
+        },
+        prefill: {
+          name: currentUser.username,
+          email: currentUser.email || "",
+        },
+        theme: {
+          color: "#4f46e5", // Indigo-600
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        setBuyError(response.error.description || "Payment failed");
+      });
+      rzp.open();
     } catch (error) {
-      const msg = (error.response && error.response.data && error.response.data.message) || error.message || "Checkout failed";
+      const msg = (error.response && error.response.data && error.response.data.message) || error.message || "Could not initiate payment";
       setBuyError(msg);
     } finally {
       setBuying(false);

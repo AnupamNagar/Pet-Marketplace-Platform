@@ -26,15 +26,20 @@
   - [x] Develop Checkout API ([TransactionController](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/controller/TransactionController.java#13-42) & [TransactionService](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/TransactionService.java#19-108)) with 5% commission logic.
   - [x] Build Frontend Buy Now modal with price breakdown and real checkout flow.
 
-- [ ] **Phase 4.5: Stripe Payment Integration**
-  - [ ] Register for Stripe account and obtain API keys.
-  - [ ] Add `stripe-java` SDK to [pom.xml](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/pom.xml).
-  - [ ] Build `StripeService` to create Payment Intents with seller payout split.
-  - [ ] Build Seller Onboarding API using Stripe Connect (bank account/KYC).
-  - [ ] Configure Stripe Webhook endpoint to confirm payments and trigger Kafka events.
-  - [ ] Install `@stripe/react-stripe-js` on frontend.
-  - [ ] Replace checkout modal with real Stripe Payment Element UI.
-  - [ ] Test end-to-end real transaction with test card `4242 4242 4242 4242`.
+- [x] **Phase 4.5: Razorpay Payment Integration**
+  > 💡 **Pricing**: Free to sign up. 2% fee per domestic transaction (UPI/Card/Wallet), 3% for international cards. No monthly fee — costs only apply on live transactions.
+  > 💰 **Money Flow (₹5,000 sale)**: Razorpay takes ₹100 (2%) → Platform keeps ₹250 (5% commission) → Seller receives ₹4,650.
+  > ⚠️ **Limits**: UPI max ₹1,00,000/txn · Cards max ₹10,00,000/txn · KYC required (PAN + Aadhaar + Bank) before going live · Settlement T+3 days.
+  > 🧪 **Test Mode**: Completely free, unlimited — Test Card: `4111 1111 1111 1111` · Test UPI: `success@razorpay`
+  - [x] Register for Razorpay account and obtain `key_id` & `key_secret`.
+  - [x] Enable **Razorpay Route** from the dashboard for marketplace commission splits.
+  - [x] Add `razorpay-java` SDK to [pom.xml](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/pom.xml).
+  - [x] Build [RazorpayService](file:///c:/Users/KSPL152/Desktop/Pet-Marketplace-Platform/Pet-Marketplace-Platform/backend/src/main/java/com/petmarketplace/backend/service/RazorpayService.java#18-90) to create Orders with 5% platform commission.
+  - [x] Build Seller Onboarding API using Razorpay Route linked accounts.
+  - [x] Configure Razorpay Webhook endpoint to confirm payments and trigger Kafka events.
+  - [x] Install `razorpay` npm package on frontend.
+  - [x] Replace checkout modal with Razorpay Checkout.js (supports UPI, cards, wallets).
+  - [x] Test end-to-end transaction using Razorpay test card / UPI test credentials.
 
 - [ ] **Phase 5: Appointments & Reviews**
   - [ ] Create `Appointment` and `Review` entities/repositories.
