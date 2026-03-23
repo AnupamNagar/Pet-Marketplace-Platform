@@ -24,7 +24,8 @@ COPY --from=build /app/target/*.jar app.jar
 # Render / Hosting platforms expect $PORT to be honored
 ENV SERVER_PORT=${PORT:-8080}
 
-RUN chown petverse:petverse app.jar
+# Create uploads directory and grant permissions to the non-root user
+RUN mkdir -p uploads && chown -R petverse:petverse /app
 USER petverse
 
 EXPOSE 8080
